@@ -138,6 +138,7 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
     private var currentLightPreset: String? = null
     private var currentHideMapPois: Boolean = false
     private var currentStopMarkers: List<Map<String, Any>>? = null
+    private var currentShowSpeedInfo: Boolean = false
     private var vehicleMaxHeight: Double? = null
     private var vehicleMaxWidth: Double? = null
 
@@ -229,6 +230,22 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
                     cancelButtonId = cancelButtonId,
                     constraintLayout = parentConstraintLayout
             )
+
+    /**
+     * TME fork: posted speed limit + current speed, the NavSDK\u0027s own
+     * MapboxSpeedInfoView (renders the correct sign style per country).
+     * Hidden until the first speed fix arrives.
+     */
+    private val tmeSpeedInfoApi = com.mapbox.navigation.tripdata.speedlimit.api.MapboxSpeedInfoApi()
+    private val tmeSpeedInfoView =
+            com.mapbox.navigation.ui.components.speedlimit.view.MapboxSpeedInfoView(context).also {
+                it.visibility = View.GONE
+                val params = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
+                params.gravity = Gravity.TOP or Gravity.END
+                params.topMargin = (180 * PIXEL_DENSITY).toInt()
+                params.marginEnd = (16 * PIXEL_DENSITY).toInt()
+                addView(it, params)
+            }
 
     private val routeLineApiOptions = MapboxRouteLineApiOptions.Builder().build()
     private val routeLineApi = MapboxRouteLineApi(routeLineApiOptions)
@@ -419,7 +436,42 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
             object : LocationObserver {
                 override fun onNewLocationMatcherResult(
                         locationMatcherResult: LocationMatcherResult
-                ) {}
+                ) {
+                    if (currentShowSpeedInfo) {
+                        try {
+                            val options =
+                                    DistanceFormatterOptions.Builder(context)
+                                            .locale(currentLocale)
+                                            .build()
+                            val speedInfo =
+                                    tmeSpeedInfoApi.updatePostedAndCurrentSpeed(
+                                            locationMatcherResult,
+                                            options,
+                                    )
+                            if (speedInfo != null) {
+                                tmeSpeedInfoView.visibility = View.VISIBLE
+                                tmeSpeedInfoView.render(speedInfo)
+                                // React Native owns this hierarchy's layout and never
+                                // measures children it did not create, so the sign must
+                                // measure and place itself or it stays 0x0.
+                                tmeSpeedInfoView.post {
+                                    val unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                                    tmeSpeedInfoView.measure(unspecified, unspecified)
+                                    val rightEdge = width - (16 * PIXEL_DENSITY).toInt()
+                                    val topEdge = (180 * PIXEL_DENSITY).toInt()
+                                    tmeSpeedInfoView.layout(
+                                            rightEdge - tmeSpeedInfoView.measuredWidth,
+                                            topEdge,
+                                            rightEdge,
+                                            topEdge + tmeSpeedInfoView.measuredHeight,
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.w("TMESpeed", "speed info failed", e)
+                        }
+                    }
+                }
                 override fun onNewRawLocation(rawLocation: com.mapbox.common.location.Location) {
                     // Update puck location
                     navigationLocationProvider.changePosition(
@@ -933,6 +985,13 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
             }
         } catch (e: Exception) {
             // Marker rendering must never take down navigation.
+        }
+    }
+
+    fun setShowSpeedInfo(show: Boolean?) {
+        currentShowSpeedInfo = show ?: false
+        if (currentShowSpeedInfo == false) {
+            tmeSpeedInfoView.visibility = View.GONE
         }
     }
 
