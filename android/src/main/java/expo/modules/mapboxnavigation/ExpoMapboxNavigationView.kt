@@ -1023,6 +1023,17 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
 
     fun setLightPreset(preset: String?) {
         currentLightPreset = preset
+        // Apply immediately when the style is already up: a run that crosses
+        // dusk must change with the sky, not wait for a style reload.
+        mapboxStyle?.let { style ->
+            currentLightPreset?.let { value ->
+                try {
+                    style.setStyleImportConfigProperty("basemap", "lightPreset", com.mapbox.bindgen.Value(value))
+                } catch (e: Exception) {
+                    // Classic styles have no basemap import - fine.
+                }
+            }
+        }
     }
 
     fun setSimulateRoute(simulate: Boolean?) {
