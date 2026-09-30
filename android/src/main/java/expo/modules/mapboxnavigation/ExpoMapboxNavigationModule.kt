@@ -81,6 +81,9 @@ class ExpoMapboxNavigationModule : Module() {
         view.setRouteExcludeList(excludeList)
       }
 
+      Prop("showSpeedInfo") { view: ExpoMapboxNavigationView, show: Boolean? ->
+        view.setShowSpeedInfo(show)
+      }
       Prop("hideMapPois") { view: ExpoMapboxNavigationView, hide: Boolean? ->
         view.setHideMapPois(hide)
       }
