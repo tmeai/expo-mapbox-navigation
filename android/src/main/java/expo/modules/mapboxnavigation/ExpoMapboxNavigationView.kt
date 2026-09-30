@@ -1,6 +1,9 @@
+@file:OptIn(com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI::class)
+
 package expo.modules.mapboxnavigation
 
 import android.content.Context
+import com.mapbox.navigation.core.replay.route.ReplayRouteMapper
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.Color
@@ -125,6 +128,8 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
     private var currentPlaceCustomRasterLayerAbove: String? = null
     private var currentDisableAlternativeRoutes: Boolean? = null
     private var currentFollowingZoom: Double? = null
+    private var currentSimulateRoute: Boolean = false
+    private var currentLightPreset: String? = null
     private var vehicleMaxHeight: Double? = null
     private var vehicleMaxWidth: Double? = null
 
@@ -851,7 +856,18 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
 
     private fun onRoutesReady(routes: List<NavigationRoute>) {
         mapboxNavigation?.setNavigationRoutes(routes)
-        mapboxNavigation?.startTripSession(withForegroundService = false)
+        if (currentSimulateRoute) {
+            // TME fork: drive the run with the SDK's own route replay engine —
+            // the puck follows the exact matched line with realistic speeds,
+            // which no external GPS feeder can match.
+            mapboxNavigation?.startReplayTripSession()
+            val replayEvents = ReplayRouteMapper().mapDirectionsRouteGeometry(routes.first().directionsRoute)
+            mapboxNavigation?.mapboxReplayer?.pushEvents(replayEvents)
+            mapboxNavigation?.mapboxReplayer?.seekTo(replayEvents.first())
+            mapboxNavigation?.mapboxReplayer?.play()
+        } else {
+            mapboxNavigation?.startTripSession(withForegroundService = false)
+        }
         navigationCamera.requestNavigationCameraToFollowing(
                 stateTransitionOptions =
                         NavigationCameraTransitionOptions.Builder()
@@ -861,6 +877,14 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
     }
 
     @com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
+    fun setLightPreset(preset: String?) {
+        currentLightPreset = preset
+    }
+
+    fun setSimulateRoute(simulate: Boolean?) {
+        currentSimulateRoute = simulate ?: false
+    }
+
     fun setCoordinates(coordinates: List<Point>) {
         currentCoordinates = coordinates
         update()
@@ -1007,12 +1031,26 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
         if (currentMapStyle != null) {
             mapboxMap.loadStyle(currentMapStyle!!) { style: Style ->
                 mapboxStyle = style
-                style.localizeLabels(currentLocale)
+                try { style.localizeLabels(currentLocale) } catch (e: RuntimeException) { /* Mapbox Standard style rejects runtime localization; fall back to its own internationalization */ }
+                currentLightPreset?.let { preset ->
+                    try {
+                        style.setStyleImportConfigProperty("basemap", "lightPreset", com.mapbox.bindgen.Value(preset))
+                    } catch (e: Exception) {
+                        // Style has no configurable basemap import (classic styles) - fine.
+                    }
+                }
                 addCustomRasterLayer()
             }
         } else {
             mapboxMap.getStyle { style: Style ->
-                style.localizeLabels(currentLocale)
+                try { style.localizeLabels(currentLocale) } catch (e: RuntimeException) { /* Mapbox Standard style rejects runtime localization; fall back to its own internationalization */ }
+                currentLightPreset?.let { preset ->
+                    try {
+                        style.setStyleImportConfigProperty("basemap", "lightPreset", com.mapbox.bindgen.Value(preset))
+                    } catch (e: Exception) {
+                        // Style has no configurable basemap import (classic styles) - fine.
+                    }
+                }
                 addCustomRasterLayer()
             }
         }
