@@ -81,6 +81,12 @@ class ExpoMapboxNavigationModule : Module() {
         view.setRouteExcludeList(excludeList)
       }
 
+      Prop("lightPreset") { view: ExpoMapboxNavigationView, preset: String? ->
+        view.setLightPreset(preset)
+      }
+      Prop("simulateRoute") { view: ExpoMapboxNavigationView, simulate: Boolean? ->
+        view.setSimulateRoute(simulate)
+      }
       Prop("mapStyle") { view: ExpoMapboxNavigationView, style: String? -> view.setMapStyle(style) }
 
       Prop("mute") { view: ExpoMapboxNavigationView, isMuted: Boolean? -> view.setIsMuted(isMuted) }
