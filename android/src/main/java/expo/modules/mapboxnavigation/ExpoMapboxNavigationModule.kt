@@ -81,6 +81,12 @@ class ExpoMapboxNavigationModule : Module() {
         view.setRouteExcludeList(excludeList)
       }
 
+      Prop("hideMapPois") { view: ExpoMapboxNavigationView, hide: Boolean? ->
+        view.setHideMapPois(hide)
+      }
+      Prop("stopMarkers") { view: ExpoMapboxNavigationView, markers: List<Map<String, Any>>? ->
+        view.setStopMarkers(markers)
+      }
       Prop("lightPreset") { view: ExpoMapboxNavigationView, preset: String? ->
         view.setLightPreset(preset)
       }
