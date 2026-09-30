@@ -37,6 +37,16 @@ export type ExpoMapboxNavigationViewProps = {
   coordinates: Array<{ latitude: number; longitude: number }>;
   waypointIndices?: number[];
   useRouteMatchingApi?: boolean;
+  /** Drive the route with the SDK's replay engine instead of real GPS. */
+  simulateRoute?: boolean;
+  /** Mapbox Standard light preset: dawn | day | dusk | night. */
+  lightPreset?: string;
+  /** Hide POI, transit and place labels — streets only. */
+  hideMapPois?: boolean;
+  /** Render these as numbered pins on the map. */
+  stopMarkers?: Array<{ latitude: number; longitude: number; sequence?: number }>;
+  /** Show the SDK's own posted-limit/current-speed view. */
+  showSpeedInfo?: boolean;
   locale?: string;
   routeProfile?: string;
   routeExcludeList?: string[];
@@ -61,6 +71,10 @@ export type ExpoMapboxNavigationViewProps = {
   }) => void;
   onFinalDestinationArrival?: () => void;
   onRouteChanged?: () => void;
+  /** Posted limit and current speed, for apps rendering their own sign. */
+  onSpeedInfoChanged?: (event: {
+    nativeEvent: { postedSpeed: number; currentSpeed: number };
+  }) => void;
   onUserOffRoute?: () => void;
   onRoutesLoaded?: (event: { nativeEvent: { routes: Routes } }) => void;
   onRouteFailedToLoad?: (event: {
