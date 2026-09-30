@@ -36,6 +36,7 @@ class ExpoMapboxNavigationModule : Module() {
               "onWaypointArrival",
               "onFinalDestinationArrival",
               "onRouteChanged",
+          "onSpeedInfoChanged",
               "onUserOffRoute",
               "onRoutesLoaded",
               "onRouteFailedToLoad"
