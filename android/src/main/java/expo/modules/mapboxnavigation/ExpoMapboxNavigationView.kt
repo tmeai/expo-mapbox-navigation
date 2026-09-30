@@ -34,6 +34,12 @@ import com.mapbox.maps.extension.style.layers.generated.RasterLayer
 import com.mapbox.maps.extension.style.sources.TileSet
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.RasterSource
+import com.mapbox.maps.extension.style.sources.getSourceAs
+import com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
+import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
+import com.mapbox.maps.extension.style.layers.generated.circleLayer
+import com.mapbox.maps.extension.style.layers.generated.symbolLayer
+import com.mapbox.maps.extension.style.expressions.generated.Expression
 import com.mapbox.maps.plugin.LocationPuck2D
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
@@ -130,6 +136,8 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
     private var currentFollowingZoom: Double? = null
     private var currentSimulateRoute: Boolean = false
     private var currentLightPreset: String? = null
+    private var currentHideMapPois: Boolean = false
+    private var currentStopMarkers: List<Map<String, Any>>? = null
     private var vehicleMaxHeight: Double? = null
     private var vehicleMaxWidth: Double? = null
 
@@ -464,18 +472,9 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
 
             location.apply {
                 locationPuck =
-                        LocationPuck2D(
-                                bearingImage =
-                                        ImageHolder.from(
-                                                com.mapbox
-                                                        .navigation
-                                                        .ui
-                                                        .components
-                                                        .R
-                                                        .drawable
-                                                        .mapbox_navigation_puck_icon
-                                        ),
-                        )
+                        // TME fork: the modern Mapbox chevron (blue arrow, white ring)
+                        // instead of the legacy flat nav icon.
+                        com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck(withBearing = true)
                 setLocationProvider(navigationLocationProvider)
                 puckBearingEnabled = true
                 enabled = true
@@ -877,6 +876,74 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
     }
 
     @com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
+    /**
+     * TME fork: a bus screen wants streets, not restaurants. Standard style
+     * exposes these as basemap import config, same mechanism as lightPreset.
+     */
+    private fun applyTmeBasemapDeclutter(style: Style) {
+        if (!currentHideMapPois) return
+        for (key in listOf("showPointOfInterestLabels", "showTransitLabels", "showPlaceLabels")) {
+            try {
+                style.setStyleImportConfigProperty("basemap", key, com.mapbox.bindgen.Value(false))
+            } catch (e: Exception) {
+                // Classic styles have no basemap import - fine.
+            }
+        }
+    }
+
+    /** TME fork: the run\u0027s stops, drawn as numbered pins on the map itself. */
+    private fun addTmeStopMarkers(style: Style) {
+        val markers = currentStopMarkers ?: return
+        if (markers.isEmpty()) return
+        try {
+            val features = markers.map { marker ->
+                val feature = com.mapbox.geojson.Feature.fromGeometry(
+                    com.mapbox.geojson.Point.fromLngLat(
+                        (marker["longitude"] as Number).toDouble(),
+                        (marker["latitude"] as Number).toDouble(),
+                    )
+                )
+                feature.addStringProperty("seq", ((marker["sequence"] as? Number)?.toInt() ?: 0).toString())
+                feature
+            }
+            val collection = com.mapbox.geojson.FeatureCollection.fromFeatures(features)
+            val existing = style.getSourceAs<GeoJsonSource>("tme-stops")
+            if (existing != null) {
+                existing.featureCollection(collection)
+            } else {
+                style.addSource(geoJsonSource("tme-stops") { featureCollection(collection) })
+                style.addLayer(
+                    circleLayer("tme-stops-circle", "tme-stops") {
+                        circleColor("#357CC0")
+                        circleRadius(12.0)
+                        circleStrokeColor("#FFFFFF")
+                        circleStrokeWidth(3.0)
+                        circleEmissiveStrength(1.0)
+                    }
+                )
+                style.addLayer(
+                    symbolLayer("tme-stops-label", "tme-stops") {
+                        textField(Expression.get("seq"))
+                        textSize(12.0)
+                        textColor("#FFFFFF")
+                        textAllowOverlap(true)
+                        textIgnorePlacement(true)
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            // Marker rendering must never take down navigation.
+        }
+    }
+
+    fun setHideMapPois(hide: Boolean?) {
+        currentHideMapPois = hide ?: false
+    }
+
+    fun setStopMarkers(markers: List<Map<String, Any>>?) {
+        currentStopMarkers = markers
+    }
+
     fun setLightPreset(preset: String?) {
         currentLightPreset = preset
     }
@@ -1039,6 +1106,8 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
                         // Style has no configurable basemap import (classic styles) - fine.
                     }
                 }
+                applyTmeBasemapDeclutter(style)
+                addTmeStopMarkers(style)
                 addCustomRasterLayer()
             }
         } else {
@@ -1051,6 +1120,8 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
                         // Style has no configurable basemap import (classic styles) - fine.
                     }
                 }
+                applyTmeBasemapDeclutter(style)
+                addTmeStopMarkers(style)
                 addCustomRasterLayer()
             }
         }
