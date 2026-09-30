@@ -147,6 +147,7 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
     private val onWaypointArrival by EventDispatcher()
     private val onFinalDestinationArrival by EventDispatcher()
     private val onRouteChanged by EventDispatcher()
+    private val onSpeedInfoChanged by EventDispatcher()
     private val onUserOffRoute by EventDispatcher()
     private val onRoutesLoaded by EventDispatcher()
     private val onRouteFailedToLoad by EventDispatcher()
@@ -437,7 +438,7 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
                 override fun onNewLocationMatcherResult(
                         locationMatcherResult: LocationMatcherResult
                 ) {
-                    if (currentShowSpeedInfo) {
+                    run {
                         try {
                             val options =
                                     DistanceFormatterOptions.Builder(context)
@@ -449,6 +450,14 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
                                             options,
                                     )
                             if (speedInfo != null) {
+                                this@ExpoMapboxNavigationView.onSpeedInfoChanged(
+                                        mapOf(
+                                                "postedSpeed" to (speedInfo.postedSpeed ?: 0),
+                                                "currentSpeed" to speedInfo.currentSpeed,
+                                        )
+                                )
+                            }
+                            if (speedInfo != null && currentShowSpeedInfo) {
                                 tmeSpeedInfoView.visibility = View.VISIBLE
                                 tmeSpeedInfoView.render(speedInfo)
                                 // React Native owns this hierarchy's layout and never
@@ -524,9 +533,18 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
 
             location.apply {
                 locationPuck =
-                        // TME fork: the modern Mapbox chevron (blue arrow, white ring)
-                        // instead of the legacy flat nav icon.
-                        com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck(withBearing = true)
+                        LocationPuck2D(
+                                bearingImage =
+                                        ImageHolder.from(
+                                                com.mapbox
+                                                        .navigation
+                                                        .ui
+                                                        .components
+                                                        .R
+                                                        .drawable
+                                                        .mapbox_navigation_puck_icon
+                                        ),
+                        )
                 setLocationProvider(navigationLocationProvider)
                 puckBearingEnabled = true
                 enabled = true
